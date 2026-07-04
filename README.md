@@ -1,4 +1,4 @@
-<img width="1983" height="793" alt="image1" src="https://github.com/user-attachments/assets/ce60975d-3e43-450f-8b46-e266a98a2017" />
+<img width="1814" height="867" alt="image4" src="https://github.com/user-attachments/assets/5b24d186-cbd6-49b6-9bb6-32bb5f8498be" />
 
 # bruceNrfChat 🔐
 
