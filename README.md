@@ -1,3 +1,5 @@
+<img width="1983" height="793" alt="image1" src="https://github.com/user-attachments/assets/ce60975d-3e43-450f-8b46-e266a98a2017" />
+
 # bruceNrfChat 🔐
 
 **Encrypted text chat for ESP32‑S3 devices**  
