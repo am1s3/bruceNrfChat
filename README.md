@@ -1,6 +1,6 @@
 <img width="1814" height="867" alt="image4" src="https://github.com/user-attachments/assets/5b24d186-cbd6-49b6-9bb6-32bb5f8498be" />
 
-# bruceNrfChat v2.0.0 🔐
+# bruceNrfChat v1.2.0 🔐
 
 **Encrypted peer‑to‑peer chat with device discovery and connection requests.**
 
