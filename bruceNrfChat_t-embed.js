@@ -11,17 +11,25 @@ var btnRIGHT  = 41;
 var btnSELECT = 37;
 var btnBACK   = 42;
 
-var role = "initiator";
-var text = "";
-var receivedText = "";
+var myID = "";
+var mode = "discovery";
+var foundDevices = [];
+var selectedDevice = 0;
+var chatPartner = null;
 var sharedSecret = 0;
 var dhComplete = false;
-var mode = "keyboard";
+var text = "";
+var receivedText = "";
 var history = [];
 var maxHistory = 50;
 var logFile = "/chat_log.txt";
 var msgCounter = 0;
 var lastTypingTime = 0;
+
+var p = 2147483647;
+var g = 5;
+var privateKey = Math.floor(Math.random() * (p - 2)) + 2;
+var publicKey = modPow(g, privateKey, p);
 
 var keyboardLayout = [
     ["1","2","3","4","5","6","7","8","9","0"],
@@ -35,13 +43,13 @@ var cols = 10;
 var selectedRow = 0;
 var selectedCol = 0;
 
-var p = 2147483647;
-var g = 5;
-var privateKey = Math.floor(Math.random() * (p - 2)) + 2;
-var publicKey = modPow(g, privateKey, p);
+function getDeviceID() {
+    var mac = wifi.macAddress();
+    var parts = mac.split(":");
+    return parts[4] + parts[5];
+}
 
-if (gpio.read(btnUP) == 0) { role = "responder"; }
-
+myID = getDeviceID();
 nrf.init(nrfSCK, nrfMISO, nrfMOSI, nrfCSN, nrfCE);
 nrf.setChannel(100);
 nrf.setDataRate("250kbps");
@@ -82,31 +90,31 @@ function addHistory(roleText, text, delivered) {
     saveHistory();
 }
 
-function dhExchange() {
-    display.println("DH: exchanging keys...");
-    if (role == "initiator") {
-        nrf.send(publicKey.toString());
-        var received = nrf.receive();
-        while (received == null || received == "") { delay(100); received = nrf.receive(); }
-        var otherPublic = parseInt(received);
-        sharedSecret = modPow(otherPublic, privateKey, p);
-    } else {
-        var received = nrf.receive();
-        while (received == null || received == "") { delay(100); received = nrf.receive(); }
-        var otherPublic = parseInt(received);
-        nrf.send(publicKey.toString());
-        sharedSecret = modPow(otherPublic, privateKey, p);
-    }
-    dhComplete = true;
-    display.println("DH: secret established.");
-    display.println("Secret: " + sharedSecret);
-    delay(1000);
+function drawDiscovery() {
     display.clear();
+    display.println("=== Discover ===");
+    display.println("My ID: " + myID);
+    display.println("Found devices:");
+    for (var i = 0; i < foundDevices.length; i++) {
+        var prefix = (i == selectedDevice) ? ">" : " ";
+        display.println(prefix + foundDevices[i]);
+    }
+    display.println("UP/DOWN select | SELECT request");
+}
+
+function drawChat() {
+    display.clear();
+    display.println("Chat with " + chatPartner);
+    display.println("----------------");
+    display.println("You: " + text);
+    if (receivedText != "") display.println("Other: " + receivedText);
+    display.println("----------------");
+    display.println("SELECT send | BACK keyboard");
 }
 
 function drawKeyboard() {
     display.clear();
-    display.println("Chat (" + role + ")");
+    display.println("Chat with " + chatPartner);
     display.println("Text: " + text + "_");
     display.println("");
     for (var r = 0; r < rows; r++) {
@@ -118,17 +126,7 @@ function drawKeyboard() {
         display.println(line);
     }
     if (receivedText != "") display.println("Last: " + receivedText);
-    display.println("Keys: UP/DOWN/LEFT/RIGHT | SELECT=choose | BACK=send");
-}
-
-function drawChat() {
-    display.clear();
-    display.println("Chat (" + role + ")");
-    display.println("----------------");
-    display.println("You: " + text);
-    if (receivedText != "") display.println("Other: " + receivedText);
-    display.println("----------------");
-    display.println("Press SELECT to send | BACK to keyboard");
+    display.println("UP/DOWN/LEFT/RIGHT | SELECT=choose | BACK=send");
 }
 
 function drawHistory() {
@@ -174,8 +172,195 @@ function sendMessage(msg) {
     msgCounter++;
 }
 
-display.println("Starting DH exchange...");
-dhExchange();
+function discoveryLoop() {
+    if (millis() % 2000 < 50) {
+        nrf.send("HELLO:" + myID);
+    }
+    var incoming = nrf.receive();
+    if (incoming != null && incoming != "") {
+        if (incoming.indexOf("HELLO:") == 0) {
+            var id = incoming.substring(6);
+            if (id != myID && foundDevices.indexOf(id) == -1) {
+                foundDevices.push(id);
+                drawDiscovery();
+            }
+        }
+    }
+    if (gpio.read(btnUP) == 0) {
+        selectedDevice = (selectedDevice - 1 + foundDevices.length) % foundDevices.length;
+        drawDiscovery();
+        delay(200);
+    }
+    if (gpio.read(btnDOWN) == 0) {
+        selectedDevice = (selectedDevice + 1) % foundDevices.length;
+        drawDiscovery();
+        delay(200);
+    }
+    if (gpio.read(btnSELECT) == 0 && foundDevices.length > 0) {
+        var target = foundDevices[selectedDevice];
+        nrf.send("REQUEST:" + myID + ":" + target);
+        mode = "request";
+        display.clear();
+        display.println("Waiting for response...");
+        delay(200);
+    }
+    delay(50);
+}
+
+function requestLoop() {
+    var incoming = nrf.receive();
+    if (incoming != null && incoming != "") {
+        if (incoming.indexOf("REQUEST:") == 0) {
+            var parts = incoming.substring(8).split(":");
+            var from = parts[0];
+            var to = parts[1];
+            if (to == myID) {
+                display.clear();
+                display.println(from + " wants to chat.");
+                display.println("Accept? [SELECT=YES / BACK=NO]");
+                while (true) {
+                    if (gpio.read(btnSELECT) == 0) {
+                        nrf.send("ACCEPT:" + myID + ":" + from);
+                        chatPartner = from;
+                        mode = "dh";
+                        display.clear();
+                        display.println("Accepted. Starting key exchange...");
+                        delay(1000);
+                        break;
+                    }
+                    if (gpio.read(btnBACK) == 0) {
+                        nrf.send("REJECT:" + myID + ":" + from);
+                        mode = "discovery";
+                        drawDiscovery();
+                        return;
+                    }
+                    delay(50);
+                }
+            }
+        }
+        if (incoming.indexOf("ACCEPT:") == 0) {
+            var parts = incoming.substring(7).split(":");
+            var from = parts[0];
+            var to = parts[1];
+            if (to == myID) {
+                chatPartner = from;
+                mode = "dh";
+                display.clear();
+                display.println("Accepted. Starting key exchange...");
+                delay(1000);
+            }
+        }
+        if (incoming.indexOf("REJECT:") == 0) {
+            mode = "discovery";
+            display.clear();
+            display.println("Rejected.");
+            delay(1000);
+            drawDiscovery();
+        }
+    }
+    delay(50);
+}
+
+function dhLoop() {
+    if (!dhComplete) {
+        if (myID < chatPartner) {
+            nrf.send(publicKey.toString());
+            var received = nrf.receive();
+            while (received == null || received == "") { delay(100); received = nrf.receive(); }
+            var otherPublic = parseInt(received);
+            sharedSecret = modPow(otherPublic, privateKey, p);
+        } else {
+            var received = nrf.receive();
+            while (received == null || received == "") { delay(100); received = nrf.receive(); }
+            var otherPublic = parseInt(received);
+            nrf.send(publicKey.toString());
+            sharedSecret = modPow(otherPublic, privateKey, p);
+        }
+        dhComplete = true;
+        mode = "chat";
+        display.clear();
+        display.println("Chat ready!");
+        delay(1000);
+        drawKeyboard();
+    }
+}
+
+function chatLoop() {
+    if (gpio.read(btnSELECT) == 0) {
+        var key = keyboardLayout[selectedRow][selectedCol];
+        if (key == "SPACE") {
+            text += " ";
+            drawKeyboard();
+        } else if (key == "BACK") {
+            if (text.length > 0) text = text.slice(0, -1);
+            drawKeyboard();
+        } else if (key == "CLEAR") {
+            text = "";
+            drawKeyboard();
+        } else if (key == "SEND") {
+            if (text.length > 0) {
+                addHistory("me", text, false);
+                sendMessage(text);
+                receivedText = "";
+                drawChat();
+            }
+        } else {
+            text += key;
+            drawKeyboard();
+        }
+        delay(200);
+    }
+    if (gpio.read(btnBACK) == 0) {
+        if (text.length > 0) {
+            addHistory("me", text, false);
+            sendMessage(text);
+            receivedText = "";
+            drawChat();
+        }
+        delay(200);
+    }
+    var backPressTime = 0;
+    if (gpio.read(btnBACK) == 0) {
+        delay(50);
+        if (gpio.read(btnBACK) == 0) {
+            backPressTime = millis();
+            while (gpio.read(btnBACK) == 0) { delay(20); }
+            if (millis() - backPressTime > 1500) {
+                drawHistory();
+                mode = "history";
+                delay(200);
+            }
+        }
+    }
+    var incoming = nrf.receive();
+    if (incoming != null && incoming != "") {
+        if (incoming == "TYP") {
+            display.clear();
+            display.println("Other is typing...");
+            delay(500);
+            drawKeyboard();
+        } else if (incoming.indexOf("MSG:") == 0) {
+            var parts = incoming.substring(4).split(":");
+            var msgId = parseInt(parts[0]);
+            var encryptedText = parts.slice(1).join(":");
+            var decrypted = encryptDecrypt(encryptedText, sharedSecret);
+            receivedText = decrypted;
+            addHistory("other", decrypted, true);
+            nrf.send("ACK:" + msgId);
+            drawKeyboard();
+        }
+    }
+    delay(50);
+}
+
+function historyLoop() {
+    if (gpio.read(btnSELECT) == 0 || gpio.read(btnBACK) == 0) {
+        mode = "chat";
+        drawKeyboard();
+        delay(200);
+    }
+    delay(50);
+}
 
 if (storage.exists(logFile)) {
     var content = storage.read(logFile);
@@ -193,147 +378,12 @@ if (storage.exists(logFile)) {
     }
 }
 
-drawKeyboard();
+drawDiscovery();
 
 while (true) {
-    if (mode == "keyboard") {
-        if (gpio.read(btnUP) == 0) {
-            selectedRow = (selectedRow - 1 + rows) % rows;
-            if (selectedRow == rows - 1) selectedCol = 0;
-            drawKeyboard();
-            delay(200);
-            if (millis() - lastTypingTime > 1000) {
-                nrf.send("TYP");
-                lastTypingTime = millis();
-            }
-        }
-        if (gpio.read(btnDOWN) == 0) {
-            selectedRow = (selectedRow + 1) % rows;
-            if (selectedRow == rows - 1) selectedCol = 0;
-            drawKeyboard();
-            delay(200);
-            if (millis() - lastTypingTime > 1000) {
-                nrf.send("TYP");
-                lastTypingTime = millis();
-            }
-        }
-        if (gpio.read(btnLEFT) == 0) {
-            selectedCol = (selectedCol - 1 + cols) % cols;
-            drawKeyboard();
-            delay(200);
-        }
-        if (gpio.read(btnRIGHT) == 0) {
-            selectedCol = (selectedCol + 1) % cols;
-            drawKeyboard();
-            delay(200);
-        }
-        if (gpio.read(btnSELECT) == 0) {
-            var key = keyboardLayout[selectedRow][selectedCol];
-            if (key == "SPACE") {
-                text += " ";
-                drawKeyboard();
-            } else if (key == "BACK") {
-                if (text.length > 0) text = text.slice(0, -1);
-                drawKeyboard();
-            } else if (key == "CLEAR") {
-                text = "";
-                drawKeyboard();
-            } else if (key == "SEND") {
-                if (text.length > 0) {
-                    addHistory("me", text, false);
-                    sendMessage(text);
-                    receivedText = "";
-                    mode = "chat";
-                    drawChat();
-                }
-            } else {
-                text += key;
-                drawKeyboard();
-            }
-            delay(200);
-        }
-        if (gpio.read(btnBACK) == 0) {
-            if (text.length > 0) {
-                addHistory("me", text, false);
-                sendMessage(text);
-                receivedText = "";
-                mode = "chat";
-                drawChat();
-            }
-            delay(200);
-        }
-        var backPressTime = 0;
-        if (gpio.read(btnBACK) == 0) {
-            delay(50);
-            if (gpio.read(btnBACK) == 0) {
-                backPressTime = millis();
-                while (gpio.read(btnBACK) == 0) { delay(20); }
-                if (millis() - backPressTime > 1500) {
-                    mode = "history";
-                    drawHistory();
-                    delay(200);
-                }
-            }
-        }
-        var incoming = nrf.receive();
-        if (incoming != null && incoming != "") {
-            if (incoming == "TYP") {
-                display.clear();
-                display.println("Other is typing...");
-                delay(500);
-                drawKeyboard();
-            } else if (incoming.indexOf("MSG:") == 0) {
-                var parts = incoming.substring(4).split(":");
-                var msgId = parseInt(parts[0]);
-                var encryptedText = parts.slice(1).join(":");
-                var decrypted = encryptDecrypt(encryptedText, sharedSecret);
-                receivedText = decrypted;
-                addHistory("other", decrypted, true);
-                nrf.send("ACK:" + msgId);
-                drawKeyboard();
-            }
-        }
-        delay(50);
-    }
-    else if (mode == "chat") {
-        display.println("Press SELECT to return to keyboard");
-        display.println("Press BACK to view history");
-        if (gpio.read(btnSELECT) == 0) {
-            mode = "keyboard";
-            drawKeyboard();
-            delay(200);
-        }
-        if (gpio.read(btnBACK) == 0) {
-            mode = "history";
-            drawHistory();
-            delay(200);
-        }
-        var incoming = nrf.receive();
-        if (incoming != null && incoming != "") {
-            if (incoming.indexOf("MSG:") == 0) {
-                var parts = incoming.substring(4).split(":");
-                var msgId = parseInt(parts[0]);
-                var encryptedText = parts.slice(1).join(":");
-                var decrypted = encryptDecrypt(encryptedText, sharedSecret);
-                receivedText = decrypted;
-                addHistory("other", decrypted, true);
-                nrf.send("ACK:" + msgId);
-                drawChat();
-            }
-        }
-        delay(50);
-    }
-    else if (mode == "history") {
-        if (gpio.read(btnSELECT) == 0) {
-            mode = "keyboard";
-            drawKeyboard();
-            delay(200);
-        }
-        if (gpio.read(btnBACK) == 0) {
-            mode = "keyboard";
-            drawKeyboard();
-            delay(200);
-        }
-        delay(50);
-    }
+    if (mode == "discovery") discoveryLoop();
+    else if (mode == "request") requestLoop();
+    else if (mode == "dh") dhLoop();
+    else if (mode == "chat") chatLoop();
+    else if (mode == "history") historyLoop();
 }
