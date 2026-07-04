@@ -133,12 +133,20 @@ That’s it! Start typing and send your first encrypted message.
 
 ## 📁 Script files
 
-| File | Device |
-|------|--------|
-| `bruceNrfChat_smoochiee.js` | Smoochiee V2 (5 buttons) |
-| `bruceNrfChat_t-embed.js` | LilyGO T‑Embed CC1101 |
+## 🧩 Supported Devices
 
-For other boards, use either file and adjust the pin definitions at the top.
+bruceNrfChat provides ready‑to‑run scripts for the following devices:
+
+| Device | Script File |
+|--------|-------------|
+| **Smoochiee V2** | `bruceNrfChat_smoochiee.js` |
+| **LilyGO T‑Embed CC1101** | `bruceNrfChat_t-embed.js` |
+| **M5Stack Cardputer** | `bruceNrfChat_cardputer.js` |
+| **M5StickC Plus2** | `bruceNrfChat_stickcplus2.js` |
+| **LilyGO T‑Display S3** | `bruceNrfChat_tdisplay-s3.js` |
+| **CYD‑2432S028** | `bruceNrfChat_cyd.js` |
+
+For other boards, simply change the `nrfCE`, `nrfCSN`, and button pin numbers at the top of the script.
 
 ---
 
