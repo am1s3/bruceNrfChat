@@ -54,17 +54,17 @@ This project is intended for **educational and research purposes** – demonstra
 
 ---
 
-## Supported Hardware
+## 🧩 Supported Hardware
 
-| Device / Board | Script File | Default Pin Configuration |
-|----------------|-------------|---------------------------|
-| **Smoochiee V2** | `bruceNrfChat_v2.js` | Standard Bruce reference board |
-| **LilyGO T‑Embed CC1101** | `bruceNrfChat_v2.js` | Built‑in CC1101 with nRF24 on SPI |
-| **M5Stack Cardputer** | `bruceNrfChat_v2.js` | Integrated keyboard and display |
-| **M5StickC Plus2** | `bruceNrfChat_v2.js` | 3 buttons, compact form factor |
-| **LilyGO T‑Display S3** | `bruceNrfChat_v2.js` | Popular display board |
-| **CYD‑2432S028** | `bruceNrfChat_v2.js` | Resistive touch, ILI9341 display |
-| **Custom ESP32‑S3** | `bruceNrfChat_v2.js` | **User‑definable pinout** – edit at the top of the script |
+| Device / Board | Script File |
+|----------------|-------------|
+| **Smoochiee V2** | `bruceNrfChat_smoochiee.js` |
+| **LilyGO T‑Embed CC1101** | `bruceNrfChat_t-embed.js` |
+| **M5Stack Cardputer** | `bruceNrfChat_cardputer.js` |
+| **M5StickC Plus2** | `bruceNrfChat_stickcplus2.js` |
+| **LilyGO T‑Display S3** | `bruceNrfChat_tdisplay-s3.js` |
+| **CYD‑2432S028** | `bruceNrfChat_cyd.js` |
+| **Custom ESP32‑S3 (any board)** | `bruceNrfChat_ESP32-generic.js` |
 
 > **Note:** All devices now use the **same unified script** – simply adjust the pin definitions at the beginning of the file.
 
