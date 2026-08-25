@@ -34,9 +34,22 @@ var dhTimeout = 5000;
 var historyTimeout = 10000;
 var historyTimer = 0;
 var lastIncomingTime = 0;
+var receivedIds = [];
 
 var p = 2147483647;
 var g = 5;
+
+function modPow(base, exp, mod) {
+    var result = 1;
+    base = base % mod;
+    while (exp > 0) {
+        if (exp % 2 == 1) result = (result * base) % mod;
+        exp = exp >> 1;
+        base = (base * base) % mod;
+    }
+    return result;
+}
+
 var privateKey = Math.floor(Math.random() * (p - 2)) + 2;
 var publicKey = modPow(g, privateKey, p);
 
@@ -71,17 +84,6 @@ nrf.setChannel(100);
 nrf.setDataRate("250kbps");
 nrf.setPower("max");
 display.clear();
-
-function modPow(base, exp, mod) {
-    var result = 1;
-    base = base % mod;
-    while (exp > 0) {
-        if (exp % 2 == 1) result = (result * base) % mod;
-        exp = exp >> 1;
-        base = (base * base) % mod;
-    }
-    return result;
-}
 
 function encryptDecrypt(msg, key) {
     var out = "";
@@ -404,9 +406,9 @@ function chatLoop() {
             var parts = incoming.substring(4).split(":");
             var msgId = parseInt(parts[0]);
             var encryptedText = parts.slice(1).join(":");
-            if (!window.receivedIds) window.receivedIds = [];
-            if (window.receivedIds.indexOf(msgId) == -1) {
-                window.receivedIds.push(msgId);
+            
+            if (receivedIds.indexOf(msgId) == -1) {
+                receivedIds.push(msgId);
                 var decrypted = encryptDecrypt(encryptedText, sharedSecret);
                 receivedText = decrypted;
                 addHistory("other", decrypted, true);
